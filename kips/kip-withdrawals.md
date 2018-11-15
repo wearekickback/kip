@@ -170,8 +170,8 @@ constructor () {
 }
 
   function deposit(address _user) external payable {
-    EventInterface event = EventInterface(msg.sender)
-    uint256 _deposit = event.getDeposit(_user)
+    EventInterface event = EventInterface(msg.sender);
+    uint256 _deposit = event.getDeposit(_user);
     uint256 bal = calculatePayout(_user);
     bal += msg.value;
     require(bal >= _deposit, 'you need to pay more to register for event');
