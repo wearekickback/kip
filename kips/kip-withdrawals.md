@@ -1,7 +1,7 @@
 ---
 kip: <to be assigned>
 title: Allow for easier withdrawals and re-using payouts
-author: @hiddentao
+authors: Ramesh Nair, Jeff Lau
 status: Draft
 created: 2018-11-11
 ---
