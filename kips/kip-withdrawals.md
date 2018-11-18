@@ -48,7 +48,9 @@ The above design was arrived at after considering various alternatives as well a
 
 - **Easier overview of user balance** - because all ETH is in one place we can easily give the user an on-chain overview of their total deposits and payouts on Kickback.
 
-- **Upgrade-able contracts** - separating the payment processing logic from data storage and from event management makes it easier for us to deploy updates to the various contracts. The data storage contract is kept as simple as possible and as a pure re-usable data store, albeit with role-based access control to ensure its security.
+- **Upgrade-able contracts** - separating the payment processing logic from data storage and from event management makes it easier for us to deploy updates to the various contracts. The data storage contract is kept as simple as possible and as a pure re-usable data store, albeit with role-based access control to ensure its security. We use the `UpgradeableInterface` interface in concert with [`ERC165`](https://github.com/OpenZeppelin/openzeppelin-solidity/blob/master/contracts/introspection/ERC165.sol) to enable upgrade-able contracts (see below).
+
+- **Configurable event incentives** - one of the nice things about this architecture is that the `UserPot` is only responsible for summing up deposits and payouts - actual calculation of what the payout should be is done by the `Event` contract. If we wished to test out new strategies (e.g. sweepstakes) or try using a single `Event` instance for multiple events we could easily do so.
 
 ## Risks and and trade-offs
 
@@ -63,12 +65,11 @@ Storing all ETH into a single contract may seem risky, but we can negate this wi
 Note:
 
 - `RBACWithAdmin` - see https://github.com/runningbeta/rbac-solidity/raw/master/contracts/RBACWithAdmin.sol
+- `ERC165` - see https://github.com/OpenZeppelin/openzeppelin-solidity/blob/master/contracts/introspection/ERC165.sol
 
 **Data storage**
 
 This contract is only for storing data, thus allowing us to easily upgrade the `UserPot` contract below.
-
-The interface:
 
 ```solidity
 pragma solidity ^0.4.25;
@@ -143,70 +144,76 @@ contract Storage is RBACWithAdmin, StorageInterface {
 
 **User pot**
 
-This contracts hold all the ETH committed to events. Users can reuse payouts as deposits for new events, or withdraw all of their payouts all together in one go.
-
-The interface:
+This contracts hold all the ETH committed to events. Users can reuse payouts as deposits for new events, or withdraw all of their payouts all together in one go. It also has allows for itself to be upgraded, by sending the total balance to a newly deployed user pot instance.
 
 ```solidity
+pragma solidity ^0.4.25;
+
+interface UpgradeableInterface {
+    function upgrade(address _newContract) external;
+}
+
 interface UserPotInterface {
   function deposit(address _event, address _user, uint256 _deposit) external payable;
+  function withdraw() external;
+  function calculatePayout(address _user) external view returns (uint256);
+  function calculateDeposit(address _user) external view returns (uint256);
 }
 
-import "./StorageInterface.sol";
-import "./EventInterface.sol";
+import "./Storage.sol";
 import "./ERC165.sol";
-import "RBACWithAdmin.sol";
+import "./RBACWithAdmin.sol";
+import "./EventInterface.sol";
 
-contract UserPot is RBACWithAdmin, ERC165, UserPotInterface {
+contract UserPot is RBACWithAdmin, UserPotInterface, ERC165, UpgradeableInterface {
     bytes32 public constant STORAGE_KEY_EVENTS = keccak256("events");
     bytes32 public constant STORAGE_KEY_LEFTOVER = keccak256("leftover");
-
-  StorageInterface dataStore = StorageInterface(0x4920ebe161687f4a2180a698171ff5bfb2fbac65);
-
-uint256 INTERFACE_ID;
-
-constructor () {
-   INTERFACE_ID = this.deposit.selector ^ this.withdraw.selector ^ this.calculatePayout.selector ^ this.calculateDeposit.selector;
-}
+    
+    bytes4 INTERFACE_ID = bytes4(keccak256('UserPotInterface'));
+    
+  StorageInterface dataStore;
+  
+  constructor (address _dataStore) public {
+      _registerInterface(INTERFACE_ID);
+      dataStore = StorageInterface(_dataStore);
+  }
 
   function deposit(address _user) external payable {
-    EventInterface event = EventInterface(msg.sender);
-    uint256 _deposit = event.getDeposit(_user);
+    EventInterface _event = EventInterface(msg.sender);
+    uint256 _deposit = _event.getDeposit(_user);
     uint256 bal = calculatePayout(_user);
     bal += msg.value;
     require(bal >= _deposit, 'you need to pay more to register for event');
-    updateUserData(_user, msg.sender, bal - _deposit);
+    _updateUserData(_user, msg.sender, bal - _deposit);      
   }
-
-    function withdraw() public {
+  
+    function withdraw() external {
         uint256 bal = calculatePayout(msg.sender);
         msg.sender.transfer(bal);
-        updateUserData(msg.sender, address(0), 0);
+        _updateUserData(msg.sender, address(0), 0);
     }
-
-    function updateUserData(address _user, address _newEvent, uint256 _newBalance) internal {
+    
+    function _updateUserData(address _user, address _newEvent, uint256 _newBalance) internal {
         address[] memory events = dataStore.getAddresses(_user, STORAGE_KEY_EVENTS);
-        address[] memory newEvents = new address[](events.length + 1);
-        uint256 newEventsLength = 0;
-        uint256 len = events.length;
+        address[] memory newEvents = new address[](10);
+        uint256 newEventsLen = 0;
+
         for (uint256 i = 0; i < events.length; i += 1) {
             EventInterface e = EventInterface(events[i]);
-            // only remember still-active events
+            // remove ended events
             if (!e.hasEnded()) {
-                newEvents[newEventsLength] = events[i];
-                newEventsLength++;
+                newEvents[newEventsLen] = events[i];
+                newEventsLen++;
             }
         }
         if (_newEvent != address(0)) {
-                newEvents[newEventsLength] = events[i];
-                newEventsLength++;
+                newEvents[newEventsLen] = _newEvent;
+                newEventsLen++;
         }
-       // we should add a convenience method to StorageInterface which combines these two calls into one!
-      // TODO: passing the array through doesn't quite work yet
-        dataStore.setAddresses(_user, STORAGE_KEY_EVENTS, events, newEventsLength);
         dataStore.setUint(_user, STORAGE_KEY_LEFTOVER, _newBalance);
+        dataStore.setAddresses(_user, STORAGE_KEY_EVENTS, newEvents, newEventsLen);
     }
-
+  
   function calculatePayout(address _user) public view returns (uint256) {
     uint256 bal = dataStore.getUint(_user, STORAGE_KEY_LEFTOVER);
     address[] memory events = dataStore.getAddresses(_user, STORAGE_KEY_EVENTS);
@@ -225,22 +232,16 @@ constructor () {
     for (uint256 i = 0; i < events.length; i += 1) {
         EventInterface e = EventInterface(events[i]);
         if (!e.hasEnded()) {
-            bal += e.getDeposit(_user);
+            bal += e.getDeposited(_user);
         }
     }
     return bal;
   }
-
-    function supportsInterface(bytes4 interfaceID) external view returns (bool) {
-        return
-          interfaceID == this.supportsInterface.selector || // ERC165
-          interfaceID == INTERFACE_ID;
-    }
-
-  function destroy(address _destination) public onlyAdmin {
-      ERC165 i = ERC165(_destination);
-      require(i.supportsInterface(INTERFACE_ID));
-      selfdestruct(_destination);
+  
+  function upgrade(address _newContract) external {
+      ERC165 i = ERC165(_newContract);
+      require(i.supportsInterface(INTERFACE_ID), 'new contract has different interface');
+      selfdestruct(_newContract);
   }
 }
 ```
@@ -280,7 +281,7 @@ contract Event is RBACWithAdmin, EventInterface {
         require(!isRegistered(msg.sender), 'already registered');
 
         // send to user pot
-        userPot.deposit.value(msg.value)(address(this), msg.sender, deposit);
+        userPot.deposit.value(msg.value)(msg.sender);
 
         registered++;
         participantsIndex[registered] = msg.sender;
