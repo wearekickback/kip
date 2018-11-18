@@ -2,7 +2,7 @@
 kip: <to be assigned>
 title: Allow for easier withdrawals and re-using payouts
 authors: Ramesh Nair, Jeff Lau
-status: Draft
+status: Review
 created: 2018-11-11
 ---
 
