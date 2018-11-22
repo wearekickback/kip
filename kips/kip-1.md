@@ -1,8 +1,8 @@
 ---
-kip: <to be assigned>
+kip: 1
 title: Allow for easier withdrawals and re-using payouts
 authors: Ramesh Nair, Jeff Lau
-status: Review
+status: Accepted
 created: 2018-11-11
 ---
 
