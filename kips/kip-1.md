@@ -12,7 +12,7 @@ This change removes the cooling period (thus allowing user's to withdraw any tim
 
 ## Motivation
 
-Our current setup requires the user to manually withdraw their ETH payout from an event contract once the event has been finalized, but within a set *cooling period* (usually 1 week) after the event ends, after which withdrawal is no longer possible and the remaining ETH can be taken by the event organizer.
+Our current setup requires the user to manually withdraw their ETH payout from an event contract once the event has been finalized, but within a set *cooling period* (usually 1 week) after the event ends, after which withdrawal is no longer possible and the remaining ETH can be taken by the event organizer. 
 
 Although very few people have disagreed or complained about the above model, in practice
 In practice we find that many users either a) are unaware they need to withdraw, b) forget to withdraw, c) are unable to withdraw within the cooling period, or d) would prefer auto-withdrawal. Withdrawal also costs gas, which cuts into the user's payout, plus they already had to pay gas when RSVP'ing for an event.
@@ -26,7 +26,7 @@ We introduce 2 new contracts in addition to the existing event contract:
 
 When a user RSVP's to an event this is the new flow:
 
-1. User sends a transaction containing ETH to the event's deployed contract
+1. User calls `register()` on the event's deployed contract with enough ETH
 2. The event's contract forwards the ETH to the global `UserPot` contract
 3. The `UserPot` adds the event address to the list of events the user is attending - this data is stored in the `Storage` contract
 4. `UserPot` also calculates the amount of ETH withdrawable by the user (based on past event payouts owed to them) and records this number - also in the `Storage` contract
@@ -42,7 +42,7 @@ When a user wishes to withdraw their ETH:
 
 The above design was arrived at after considering various alternatives as well as other desirable features that users have asked for. Here are the key points:
 
-- **Single user pot is necessary** - because our system redistributes ETH between users (i.e. if you don't show up your ETH gets _given_ to other users) it's necessary to have all ETH for a given event stored in one place, as it would be too expensive gas-wise and time-wise to send ETH amongst the participants of an event. This is why we can't have a `UserPot` instance per user.
+- **Singleton user pot is necessary** - because our system redistributes ETH between users (i.e. if you don't show up your ETH gets _given_ to other users) it's necessary to have all ETH for a given event stored in one place, as it would be too expensive gas-wise and time-wise to send ETH amongst the participants of an event. This is why we can't have a `UserPot` instance per user.
 
 - **Reuse of deposit** - because we have a single user pot instance, we can easily reuse the payout from an old event as a deposit for a new event. In the sample implementation below, this is actually what happens when a user RSVP's. Thus, users do not need to withdraw their ETH and send it back in in order to attend future events.
 
@@ -310,6 +310,25 @@ contract Event is RBACWithAdmin, EventInterface {
 }
 
 ```
+
+## Future considerations
+
+The following topics has been discussed with respect to this KIP.
+
+### Automatic withdrawal
+
+Event though this change eliminates the need to call `withdraw()` per event, the user still has to withdraw manually at some point if they want to have their ETH back.
+
+Some users expressed that they would prefer that their ETH gets sent back automatically. This could be achieved in future by having the `withdraw()` function be called on behalf of a user by a third-party.
+
+### Support for different payout strategies
+
+There is some interest in different payout stratgies, e.g. using sweepstake and for different logic when handling a paid event. This KIP will enable us to cater for such variations as it detaches event-related logic from the money management side of things.
+
+### ERC20 token support
+
+If we decide to support tokens, we will need to upgrade the `UserPot` contract to support tokens.
+
 
 ## Copyright Waiver
 
