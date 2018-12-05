@@ -58,7 +58,7 @@ Although gas costs for RSVP'ing have gone up, I think this is justifiable given 
 
 The events emitted by the event contract will all stay the same - meaning our backend doesn't need to change enormously for this. However we will no longer show when a user has withdrawn from an event - there's no need to since withdrawals across events are now batched.
 
-Storing all ETH into a single contract may seem risky, but we can negate this with good testing and auditing of the contract.
+Storing all ETH into a single contract may seem risky, but we can negate this with good testing and auditing of the contract, and by managing admin access using multisig accounts with op-sec supervision.
 
 ## Implementation
 
