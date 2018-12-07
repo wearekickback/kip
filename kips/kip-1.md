@@ -171,21 +171,21 @@ contract UserPot is RBACWithAdmin, UserPotInterface, ERC165, UpgradeableInterfac
     
     bytes4 INTERFACE_ID = bytes4(keccak256('UserPotInterface'));
     
-  StorageInterface dataStore;
+    StorageInterface dataStore;
   
-  constructor (address _dataStore) public {
+    constructor (address _dataStore) public {
       _registerInterface(INTERFACE_ID);
       dataStore = StorageInterface(_dataStore);
-  }
+     }
 
-  function deposit(address _user) external payable {
-    EventInterface _event = EventInterface(msg.sender);
-    uint256 _deposit = _event.getDeposit(_user);
-    uint256 bal = calculatePayout(_user);
-    bal += msg.value;
-    require(bal >= _deposit, 'you need to pay more to register for event');
-    _updateUserData(_user, msg.sender, bal - _deposit);      
-  }
+    function deposit(address _user) external payable {
+      EventInterface _event = EventInterface(msg.sender);
+      uint256 _deposit = _event.getDeposit(_user);
+      uint256 bal = calculatePayout(_user);
+      bal += msg.value;
+      require(bal >= _deposit, 'you need to pay more to register for event');
+      _updateUserData(_user, msg.sender, bal - _deposit);      
+    }
   
     function withdraw() external {
         uint256 bal = calculatePayout(msg.sender);
