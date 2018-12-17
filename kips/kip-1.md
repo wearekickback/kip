@@ -91,53 +91,53 @@ interface StorageInterface {
 import "./RBACWithAdmin.sol";
 
 contract Storage is RBACWithAdmin, StorageInterface {
-    bytes32 public constant ROLE_WRITER = keccak256("writer");
+  bytes32 public constant ROLE_WRITER = keccak256("writer");
 
-    struct Data {
-        mapping(bytes32 => address[]) addresses;
-        mapping(bytes32 => string) strings;
-        mapping(bytes32 => bytes32) bytes32s;
-        mapping(bytes32 => uint) uints;
-    }
+  struct Data {
+    mapping(bytes32 => address[]) addresses;
+    mapping(bytes32 => string) strings;
+    mapping(bytes32 => bytes32) bytes32s;
+    mapping(bytes32 => uint) uints;
+  }
 
   mapping(address => Data) data;
 
   modifier isAuthorized (address _addr) {
-      require(hasRole(msg.sender, ROLE_ADMIN) || hasRole(msg.sender, ROLE_WRITER));
-      _;
+    require(hasRole(msg.sender, ROLE_ADMIN) || hasRole(msg.sender, ROLE_WRITER));
+    _;
   }
 
   function getAddresses(address _addr, bytes32 _key) external view returns (address[]) {
-      return data[_addr].addresses[_key];
+    return data[_addr].addresses[_key];
   }
 
   function getString(address _addr, bytes32 _key) external view returns (string) {
-      return data[_addr].strings[_key];
+    return data[_addr].strings[_key];
   }
 
   function getUint(address _addr, bytes32 _key) external view returns (uint) {
-      return data[_addr].uints[_key];
+    return data[_addr].uints[_key];
   }
 
   function getBytes32(address _addr, bytes32 _key) external view returns (bytes32) {
-      return data[_addr].bytes32s[_key];
+    return data[_addr].bytes32s[_key];
   }
 
   function setBytes32(address _addr, bytes32 _key, bytes32 _value) external isAuthorized(_addr) {
-      data[_addr].bytes32s[_key] = _value;
+    data[_addr].bytes32s[_key] = _value;
   }
 
   function setString(address _addr, bytes32 _key, string _value) external isAuthorized(_addr) {
-      data[_addr].strings[_key] = _value;
+    data[_addr].strings[_key] = _value;
   }
 
   function setUint(address _addr, bytes32 _key, uint _value) external isAuthorized(_addr) {
-      data[_addr].uints[_key] = _value;
+    data[_addr].uints[_key] = _value;
   }
 
   function setAddresses(address _addr, bytes32 _key, address[] _value, uint256 _len) external isAuthorized(_addr) {
-      data[_addr].addresses[_key] = _value;
-      data[_addr].addresses[_key].length = _len;
+    data[_addr].addresses[_key] = _value;
+    data[_addr].addresses[_key].length = _len;
   }
 }
 ```
@@ -150,7 +150,7 @@ This contracts hold all the ETH committed to events. Users can reuse payouts as 
 pragma solidity ^0.4.25;
 
 interface UpgradeableInterface {
-    function upgrade(address _newContract) external;
+  function upgrade(address _newContract) external;
 }
 
 interface UserPotInterface {
@@ -166,53 +166,53 @@ import "./RBACWithAdmin.sol";
 import "./EventInterface.sol";
 
 contract UserPot is RBACWithAdmin, UserPotInterface, ERC165, UpgradeableInterface {
-    bytes32 public constant STORAGE_KEY_EVENTS = keccak256("events");
-    bytes32 public constant STORAGE_KEY_LEFTOVER = keccak256("leftover");
-    
-    bytes4 INTERFACE_ID = bytes4(keccak256('UserPotInterface'));
-    
-    StorageInterface dataStore;
+  bytes32 public constant STORAGE_KEY_EVENTS = keccak256("events");
+  bytes32 public constant STORAGE_KEY_LEFTOVER = keccak256("leftover");
   
-    constructor (address _dataStore) public {
-      _registerInterface(INTERFACE_ID);
-      dataStore = StorageInterface(_dataStore);
-     }
-
-    function deposit(address _user) external payable {
-      EventInterface _event = EventInterface(msg.sender);
-      uint256 _deposit = _event.getDeposit(_user);
-      uint256 bal = calculatePayout(_user);
-      bal += msg.value;
-      require(bal >= _deposit, 'you need to pay more to register for event');
-      _updateUserData(_user, msg.sender, bal - _deposit);      
-    }
+  bytes4 INTERFACE_ID = bytes4(keccak256('UserPotInterface'));
   
-    function withdraw() external {
-        uint256 bal = calculatePayout(msg.sender);
-        msg.sender.transfer(bal);
-        _updateUserData(msg.sender, address(0), 0);
-    }
-    
-    function _updateUserData(address _user, address _newEvent, uint256 _newBalance) internal {
-        address[] memory events = dataStore.getAddresses(_user, STORAGE_KEY_EVENTS);
-        address[] memory newEvents = new address[](10);
-        uint256 newEventsLen = 0;
+  StorageInterface dataStore;
 
-        for (uint256 i = 0; i < events.length; i += 1) {
-            EventInterface e = EventInterface(events[i]);
-            // remove ended events
-            if (!e.hasEnded()) {
-                newEvents[newEventsLen] = events[i];
-                newEventsLen++;
-            }
-        }
-        if (_newEvent != address(0)) {
-                newEvents[newEventsLen] = _newEvent;
-                newEventsLen++;
-        }
-        dataStore.setUint(_user, STORAGE_KEY_LEFTOVER, _newBalance);
-        dataStore.setAddresses(_user, STORAGE_KEY_EVENTS, newEvents, newEventsLen);
+  constructor (address _dataStore) public {
+    _registerInterface(INTERFACE_ID);
+    dataStore = StorageInterface(_dataStore);
+   }
+
+  function deposit(address _user) external payable {
+    EventInterface _event = EventInterface(msg.sender);
+    uint256 _deposit = _event.getDeposit(_user);
+    uint256 bal = calculatePayout(_user);
+    bal += msg.value;
+    require(bal >= _deposit, 'you need to pay more to register for event');
+    _updateUserData(_user, msg.sender, bal - _deposit);      
+  }
+
+  function withdraw() external {
+    uint256 bal = calculatePayout(msg.sender);
+    msg.sender.transfer(bal);
+    _updateUserData(msg.sender, address(0), 0);
+  }
+  
+  function _updateUserData(address _user, address _newEvent, uint256 _newBalance) internal {
+    address[] memory events = dataStore.getAddresses(_user, STORAGE_KEY_EVENTS);
+    address[] memory newEvents = new address[](10);
+    uint256 newEventsLen = 0;
+
+    for (uint256 i = 0; i < events.length; i += 1) {
+      EventInterface e = EventInterface(events[i]);
+      // remove ended events
+      if (!e.hasEnded()) {
+        newEvents[newEventsLen] = events[i];
+        newEventsLen++;
+      }
     }
+    if (_newEvent != address(0)) {
+      newEvents[newEventsLen] = _newEvent;
+      newEventsLen++;
+    }
+    dataStore.setUint(_user, STORAGE_KEY_LEFTOVER, _newBalance);
+    dataStore.setAddresses(_user, STORAGE_KEY_EVENTS, newEvents, newEventsLen);
+  }
   
   function calculatePayout(address _user) public view returns (uint256) {
     uint256 bal = dataStore.getUint(_user, STORAGE_KEY_LEFTOVER);
@@ -227,7 +227,7 @@ contract UserPot is RBACWithAdmin, UserPotInterface, ERC165, UpgradeableInterfac
   }
 
   function calculateDeposit(address _user) public view returns (uint256) {
-      uint256 bal = 0;
+    uint256 bal = 0;
     address[] memory events = dataStore.getAddresses(_user, STORAGE_KEY_EVENTS);
     for (uint256 i = 0; i < events.length; i += 1) {
         EventInterface e = EventInterface(events[i]);
@@ -239,9 +239,9 @@ contract UserPot is RBACWithAdmin, UserPotInterface, ERC165, UpgradeableInterfac
   }
   
   function upgrade(address _newContract) external {
-      ERC165 i = ERC165(_newContract);
-      require(i.supportsInterface(INTERFACE_ID), 'new contract has different interface');
-      selfdestruct(_newContract);
+    ERC165 i = ERC165(_newContract);
+    require(i.supportsInterface(INTERFACE_ID), 'new contract has different interface');
+    selfdestruct(_newContract);
   }
 }
 ```
@@ -252,63 +252,62 @@ This is deployed for each event, and links back to the user pot.
 
 ```solidity
 interface EventInterface {
-    function hasEnded() external view returns (bool);
-    function getPayout(address _addr) external view returns (uint256);
-    function getDeposit(address _addr) external view returns (uint256);
+  function hasEnded() external view returns (bool);
+  function getPayout(address _addr) external view returns (uint256);
+  function getDeposit(address _addr) external view returns (uint256);
 }
 
 import "./RBACWithAdmin.sol";
 import "./UserPotInterface.sol";
 
 contract Event is RBACWithAdmin, EventInterface {
-    UserPotInterface userPot = UserPotInterface(0x610033b6dd5a08004e46f2097ca09b693d744118);
+  UserPotInterface userPot = UserPotInterface(0x610033b6dd5a08004e46f2097ca09b693d744118);
 
-    constructor (
-        string _name,
-        uint256 _deposit,
-        uint256 _limitOfParticipants,
-        address _owner
-    ) public {
-        if (_owner != address(0)) {
-            addRole (owner, ROLE_ADMIN);
-        }
-
-       // ... reset of code same as existing Conference constructor
+  constructor (
+    string _name,
+    uint256 _deposit,
+    uint256 _limitOfParticipants,
+    address _owner
+  ) public {
+    if (_owner != address(0)) {
+        addRole (owner, ROLE_ADMIN);
     }
 
-    function register() external payable onlyActive{
-        require(registered < limitOfParticipants, 'participant limit reached');
-        require(!isRegistered(msg.sender), 'already registered');
+    // ... reset of code same as existing Conference constructor
+  }
 
-        // send to user pot
-        userPot.deposit.value(msg.value)(msg.sender);
+  function register() external payable onlyActive{
+    require(registered < limitOfParticipants, 'participant limit reached');
+    require(!isRegistered(msg.sender), 'already registered');
 
-        registered++;
-        participantsIndex[registered] = msg.sender;
-        participants[msg.sender] = Participant(registered, msg.sender);
+    // send to user pot
+    userPot.deposit.value(msg.value)(msg.sender);
 
-        emit RegisterEvent(msg.sender, registered);
+    registered++;
+    participantsIndex[registered] = msg.sender;
+    participants[msg.sender] = Participant(registered, msg.sender);
+
+    emit RegisterEvent(msg.sender, registered);
+  }
+
+
+  function getPayout(address _user) external view returns (uint256) {
+    if (!ended || !isAttended(_user)) {
+        return 0;
     }
+    return payoutAmount;
+  }
 
+  function getDeposit(address _user) external view returns (uint256) {
+    return deposit;
+  }
 
-    function getPayout(address _user) external view returns (uint256) {
-        if (!ended || !isAttended(_user)) {
-            return 0;
-        }
-        return payoutAmount;
-    }
+  function hasEnded() external view returns (bool) {
+    return ended;
+  }
 
-    function getDeposit(address _user) external view returns (uint256) {
-        return deposit;
-    }
-
-    function hasEnded() external view returns (bool) {
-        return ended;
-    }
-
-   // .... rest of the code almost same as the existing Conference contract
+  // .... rest of the code almost same as the existing Conference contract
 }
-
 ```
 
 ## Future considerations
