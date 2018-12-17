@@ -146,6 +146,8 @@ contract Storage is RBACWithAdmin, StorageInterface {
 
 This contracts hold all the ETH committed to events. Users can reuse payouts as deposits for new events, or withdraw all of their payouts all together in one go. It also has allows for itself to be upgraded, by sending the total balance to a newly deployed user pot instance.
 
+NOTE: We should calculate the gas cost of the various methods (especially `updateUserData`) and then work out a reasonable limit to max. no of events a user can be regstered to attend at any one time based on that. That limit will then need to be enforced app-side as well.
+
 ```solidity
 pragma solidity ^0.4.25;
 
@@ -203,7 +205,12 @@ contract UserPot is RBACWithAdmin, UserPotInterface, ERC165, UpgradeableInterfac
    * @param _newBalance The user's new ETH leftover balance.
   function _updateUserData(address _user, address _newEvent, uint256 _newBalance) internal {
     address[] memory events = dataStore.getAddresses(_user, STORAGE_KEY_EVENTS);
+    
+    // can only really do fixed-size arrays in memory, so we limit to 10. But we should calculate the gas cost of
+    // the various methods (especially this one) and then work out a reasonable limit based on that. That limit will
+    // then need to be enforced app-side as well
     address[] memory newEvents = new address[](10);
+    
     uint256 newEventsLen = 0;
 
     for (uint256 i = 0; i < events.length; i += 1) {
