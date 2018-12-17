@@ -193,6 +193,14 @@ contract UserPot is RBACWithAdmin, UserPotInterface, ERC165, UpgradeableInterfac
     _updateUserData(msg.sender, address(0), 0);
   }
   
+  /* Update the data associated with this user in the data storage contract.
+   * 
+   * Note: for each user we constantly keep track of the list of non-ended events they have registered to attend as well as 
+   * the their current ETH balance, based on their previous contract payouts.
+   * 
+   * @param _user Address of the user to update.
+   * @param _newEvent The address of the new event they've registered for. If 0 then they haven't registered for a new event.
+   * @param _newBalance The user's new ETH leftover balance.
   function _updateUserData(address _user, address _newEvent, uint256 _newBalance) internal {
     address[] memory events = dataStore.getAddresses(_user, STORAGE_KEY_EVENTS);
     address[] memory newEvents = new address[](10);
