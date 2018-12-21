@@ -8,7 +8,7 @@ created: 2018-11-11
 
 ## Simple Summary
 
-This change removes the cooling period (thus allowing user's to withdraw any time) and minimizes the gas cost for user's to withdraw their payouts across multiple events. It also makes it possible to reuse a payout as a deposit for a new event without having to withdraw it first.
+This change removes the cooling period (thus allowing users to withdraw any time) and minimizes the gas cost for user's to withdraw their payouts across multiple events. It also makes it possible to reuse a payout as a deposit for a new event without having to withdraw it first.
 
 ## Motivation
 
