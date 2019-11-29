@@ -54,6 +54,8 @@ The above design was arrived at after considering various alternatives as well a
 
 - **Configurable event incentives** - one of the nice things about this architecture is that the `UserPot` is only responsible for summing up deposits and payouts - actual calculation of what the payout should be is done by the `Event` contract. If we wished to test out new strategies (e.g. sweepstakes) or try using a single `Event` instance for multiple events we could easily do so.
 
+- **Potential revenue opportunity** - with the rise of tools and projects such as rDAI and the DAI savings rate there is increasing opportunity of earning interest from staked assets. By changing the structure to hold our customers money it will increase the overall revenue potential when we integrate with such features in future.
+
 ## Risks and and trade-offs
 
 Although gas costs for RSVP'ing have gone up, I think this is justifiable given the improvements in overall user experience, plus the additional flexibility we gain over our current model.
