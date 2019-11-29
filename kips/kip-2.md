@@ -161,9 +161,11 @@ contract Proxy is EternalStorage {
 
 Contracts for handling access control. 
 
-At present the `ACL` stores the list of system admins and provides mechanisms for updating that list. The `AccessControl` class is how other contracts will make use of the ACL. Admins can remove add and remove other admins, but there will always be atleast 1 admin in the system.
+At present the `ACL` stores the list of system admins and provides mechanisms for updating that list. The `AccessControl` class is how other contracts will make use of the ACL. Admins can add and remove other admins, but there will always be atleast 1 admin in the system.
 
 The ACL address is set once during construction but this could easily be changed to using an ENS lookup if we want to make the ACL itself replaceable in future.
+
+_Note: I just copied the ACL code from an existing project. There could be a simpler solution for admin management if this seems too complex._
 
 ```solidity
 /**
