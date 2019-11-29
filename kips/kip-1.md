@@ -8,7 +8,7 @@ created: 2018-11-11
 
 ## Simple Summary
 
-**NOTE: this KIP has been superseded by [KIP-2](https://github.com/wearekickback/KIPs/blob/master/kips/kip-2.md)**
+**NOTE: This KIP has been superseded by [KIP-2](https://github.com/wearekickback/KIPs/blob/master/kips/kip-2.md)**
 
 This change removes the cooling period (thus allowing users to withdraw any time) and minimizes the gas cost for user's to withdraw their payouts across multiple events. It also makes it possible to reuse a payout as a deposit for a new event without having to withdraw it first.
 
