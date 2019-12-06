@@ -14,7 +14,7 @@ This change removes the cooling period (thus allowing users to withdraw any time
 
 ## Motivation
 
-Our current setup requires the user to manually withdraw their ETH payout from an event contract once the event has been finalized, but within a set *cooling period* (usually 1 week) after the event ends, after which withdrawal is no longer possible and the remaining ETH can be taken by the event organizer. 
+Our current setup requires the user to manually withdraw their ETH payout from an event contract once the event has been finalized, but within a set *cooling period* (usually 1 week) after the event ends, after which withdrawal is no longer possible and the remaining ETH can be taken by the event organizer.
 
 Although very few people have disagreed or complained about the above model, in practice
 In practice we find that many users either a) are unaware they need to withdraw, b) forget to withdraw, c) are unable to withdraw within the cooling period, or d) would prefer auto-withdrawal. Withdrawal also costs gas, which cuts into the user's payout, plus they already had to pay gas when RSVP'ing for an event.
@@ -30,25 +30,26 @@ When a user RSVP's to an event this is the new flow:
 
 1. User calls `register()` on the event's deployed contract with enough ETH
 2. The event's contract forwards the ETH to the global `UserPot` contract
+2a. _In the case of ERC20 tokens the `UserPot` will transfer the requisite amount from the user's account, thus the user needs to have previously approved the `UserPot` contract_.
 3. The `UserPot` adds the event address to the list of events the user is attending
-4. `UserPot` also calculates the amount of ETH withdrawable by the user (based on past event payouts owed to them) and records this number
+4. `UserPot` also calculates the amount of ETH/tokens withdrawable by the user (based on past event payouts owed to them) and records this number
 
 When a user wishes to withdraw their ETH:
 
 1. The user send a transaction to `UserPot` asking to withdraw
-2. `UserPot` calculates all the ETH owed to the user based on past attendance
-3. `UserPot` updates the `Storage` contract data for the user, moving events which have ended from the user's event list, and setting their withdrawable balance to 0
-4. `UserPot` sends the total ETH back to the user
+2. `UserPot` calculates all the ETH/tokens owed to the user based on past attendance
+3. `UserPot` updates the storage data for the user, moving events which have ended from the user's event list, and setting their withdrawable balance to 0
+4. `UserPot` sends the total ETH/tokens back to the user
 
 ## Rationale
 
 The above design was arrived at after considering various alternatives as well as other desirable features that users have asked for. Here are the key points:
 
-- **Singleton user pot is necessary** - because our system redistributes ETH between users (i.e. if you don't show up your ETH gets _given_ to other users) it's necessary to have all ETH for a given event stored in one place, as it would be too expensive gas-wise and time-wise to send ETH amongst the participants of an event. This is why we can't have a `UserPot` instance per user.
+- **Singleton user pot is necessary** - because our system redistributes ETH/tokens between users (i.e. if you don't show up your ETH/tokens get _given_ to other users) it's necessary to have all ETH/tokens for a given event stored in one place, as it would be too expensive gas-wise and time-wise to send ETH/tokens amongst the participants of an event. This is why we can't have a `UserPot` instance per user.
 
-- **Reuse of deposit** - because we have a single user pot instance, we can easily reuse the payout from an old event as a deposit for a new event. In the sample implementation below, this is actually what happens when a user RSVP's. Thus, users do not need to withdraw their ETH and send it back in in order to attend future events.
+- **Reuse of deposit** - because we have a single user pot instance, we can easily reuse the payout from an old event as a deposit for a new event. In the sample implementation below, this is actually what happens when a user RSVP's. Thus, users do not need to withdraw their ETH/tokens and send it back in in order to attend future events.
 
-- **Easier overview of user balance** - because all ETH is in one place we can easily give the user an on-chain overview of their total deposits and payouts on Kickback.
+- **Easier overview of user balance** - because all ETH/tokens are in one place we can easily give the user an on-chain overview of their total deposits and payouts on Kickback.
 
 - **Upgrade-able contracts** - by making the user pot upgradeable (with admin approval) we allow for flexibility in future and for bug fixing capability.
 
@@ -62,11 +63,9 @@ Although gas costs for RSVP'ing have gone up, I think this is justifiable given 
 
 The events emitted by the event contract will all stay the same - meaning our backend doesn't need to change enormously for this. However we will no longer show when a user has withdrawn from an event - there's no need to since withdrawals across events are now batched.
 
-Storing all ETH into a single contract may seem risky, but we can negate this with good testing and auditing of the contract, and by managing admin access using multisig accounts with op-sec supervision.
+Storing all ETH/tokens into a single contract may seem risky, but we can negate this with good testing and auditing of the contract, and by managing admin access using multisig accounts with op-sec supervision.
 
 ## Implementation
-
-_Note: the code below does not take into account ERC-20 funded events, just ETH ones_
 
 **EternalStorage**
 
@@ -161,7 +160,7 @@ contract Proxy is EternalStorage {
 
 **IACL, ACL, AccessControl**
 
-Contracts for handling access control. 
+Contracts for handling access control.
 
 At present the `ACL` stores the list of system admins and provides mechanisms for updating that list. The `AccessControl` class is how other contracts will make use of the ACL. Admins can add and remove other admins, but there will always be atleast 1 admin in the system.
 
@@ -267,6 +266,16 @@ Note that `UserPot` doesn't implement `IUserPot` itself since it's going to be a
 
 ```solidity
 /**
+ * Interface for ERC20
+ */
+interface IERC20 {
+  function balanceOf(address account) external view returns (uint256);
+  function transfer(address recipient, uint256 amount) external returns (bool);
+  function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+}
+
+
+/**
  * Interface for User pot
  */
 interface IUserPot {
@@ -289,23 +298,44 @@ contract UserPot is AccessControl, Proxy {
  * User pot implementation
  */
 contract UserPotImpl is EternalStorage, AccessControl, IUserPot {
-  function deposit(address _event, address _user, uint256   _deposit) public payable {
+  function deposit(address _event, address _user) public payable {
     IEvent _event = IEvent(msg.sender);
-    uint256 _deposit = _event.getDeposit(_user);
-    uint256 bal = calculatePayout(_user);
-    bal += msg.value;
-    require(bal >= _deposit, 'you need to pay more to register for event');
-    _updateUserData(_user, msg.sender, bal - _deposit);          
+    address token = _event.getToken();
+    uint256 deposit = _event.getDeposit(_user);
+    uint256 bal = calculatePayout(_user, _token);
+
+    if (token != address(0)) {
+      if (bal < deposit) {
+        IERC20 t = IERC20(token);
+        require(t.balanceOf(_user) + bal >= deposit, 'you need to have more tokens to register for event');
+        t.transferFrom(_user, address(this), deposit - bal);
+        bal = 0;
+      } else {
+        bal = bal - deposit;
+      }
+    } else {
+      bal += msg.value;
+      require(bal >= deposit, 'you need to pay more to register for event');
+      bal = bal - deposit;
+    }
+
+    _updateUserData(_user, msg.sender, token, bal);
   }
 
-  function withdraw() public {
-    uint256 bal = calculatePayout(msg.sender);
-    _updateUserData(msg.sender, address(0), 0);
-    msg.sender.transfer(bal);
+  function withdraw(address _token) public {
+    uint256 bal = calculatePayout(msg.sender, _token);
+
+    _updateUserData(msg.sender, address(0), _token, 0);
+
+    if (_token != address(0)) {
+      IERC20(_token).transfer(msg.sender, bal);
+    } else {
+      msg.sender.transfer(bal);
+    }
   }
 
-  function calculatePayout(address _user) public view returns (uint256) {
-    string memory key = string(abi.encodePacked(_user));
+  function calculatePayout(address _user, address _token) public view returns (uint256) {
+    string memory key = string(abi.encodePacked(_user, _token));
     uint256 bal = dataUint256[key];
     address[] storage events = dataManyAddresses[key];
     for (uint256 i = 0; i < events.length; i += 1) {
@@ -317,8 +347,8 @@ contract UserPotImpl is EternalStorage, AccessControl, IUserPot {
     return bal;
   }
 
-  function calculateDeposit(address _user) public view returns (uint256) {
-    string memory key = string(abi.encodePacked(_user));
+  function calculateDeposit(address _user, address _token) public view returns (uint256) {
+    string memory key = string(abi.encodePacked(_user, _token));
     uint256 bal = 0;
     address[] storage events = dataManyAddresses[key];
     for (uint256 i = 0; i < events.length; i += 1) {
@@ -331,17 +361,18 @@ contract UserPotImpl is EternalStorage, AccessControl, IUserPot {
   }
 
   /* Update the data associated with this user in the data storage contract.
-   * 
-   * Note: for each user we constantly keep track of the list of non-ended events they have registered to attend as well as 
+   *
+   * Note: for each user we constantly keep track of the list of non-ended events they have registered to attend as well as
    * the their current ETH balance, based on their previous contract payouts.
-   * 
+   *
    * @param _user Address of the user to update.
    * @param _newEvent The address of the new event they've registered for. If 0 then they haven't registered for a new event.
+   * @param _token The token being dealt with. If null address then ETH is the token.
    * @param _newBalance The user's new ETH leftover balance.
    */
-  function _updateUserData(address _user, address _newEvent, uint256 _newBalance) internal {
-    string memory key = string(abi.encodePacked(_user));
-    
+  function _updateUserData(address _user, address _newEvent, address _token, uint256 _newBalance) internal {
+    string memory key = string(abi.encodePacked(_user, _token));
+
     dataUint256[key] = _newBalance;
 
     address[] storage events = dataManyAddresses[key];
@@ -360,14 +391,14 @@ contract UserPotImpl is EternalStorage, AccessControl, IUserPot {
         numEvents--;
       }
     }
-    
+
     events.length = numEvents;
 
     if (_newEvent != address(0)) {
       events[numEvents] = _newEvent;
       events.length++;
     }
-  }  
+  }
 }
 ```
 
@@ -381,6 +412,7 @@ The event contracts (i.e. the existing `Conference` contract). Just the rough mi
  */
 interface IEvent {
   function hasEnded() external view returns (bool);
+  function getToken() external view returns (address);
   function getPayout(address _addr) external view returns (uint256);
   function getDeposit(address _addr) external view returns (uint256);
 }
@@ -402,7 +434,7 @@ contract Event is IEvent {
     // ...
   }
 
-  function register() external payable onlyActive{
+  function register() public payable onlyActive{
     require(registered < limitOfParticipants, 'participant limit reached');
     require(!isRegistered(msg.sender), 'already registered');
 
@@ -416,19 +448,22 @@ contract Event is IEvent {
     emit RegisterEvent(msg.sender, registered);
   }
 
+  function getToken() public returns (address) {
+    return address(0); // ETH
+  }
 
-  function getPayout(address _user) external view returns (uint256) {
+  function getPayout(address _user) public view returns (uint256) {
     if (!ended || !isAttended(_user)) {
         return 0;
     }
     return payoutAmount;
   }
 
-  function getDeposit(address _user) external view returns (uint256) {
+  function getDeposit(address _user) public view returns (uint256) {
     return deposit;
   }
 
-  function hasEnded() external view returns (bool) {
+  function hasEnded() public view returns (bool) {
     return ended;
   }
 
@@ -445,15 +480,11 @@ The following topics has been discussed with respect to this KIP.
 
 Event though this change eliminates the need to call `withdraw()` per event, the user still has to withdraw manually at some point if they want to have their ETH back.
 
-Some users expressed that they would prefer that their ETH gets sent back automatically. This could be achieved in future by having the `withdraw()` function be called on behalf of a user by a third-party. But realistically speaking, users are probably better off not _needing_ to withdraw anymore, and only withdrawing later on when they actually _want_ to.
+Some users expressed that they would prefer that their ETH/tokens get sent back automatically. This could be achieved in future by having the `withdraw()` function be called on behalf of a user by a third-party. But realistically speaking, users are probably better off not _needing_ to withdraw anymore, and only withdrawing later on when they actually _want_ to.
 
 ### Support for different payout strategies
 
 There is some interest in different payout strategies, e.g. using sweepstake and for different logic when handling a paid event. This KIP will enable us to cater for such variations as it detaches event-related logic from the money management side of things.
-
-### ERC20 token support
-
-The code above was written for ETH-funded events. Some minor modifications will be needed for ERC-20 support.
 
 ## Copyright Waiver
 
